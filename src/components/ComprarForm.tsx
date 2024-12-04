@@ -38,24 +38,7 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
   
   const valorBilhete = 10
 
-  useEffect(() => {
-    if (vendedorSlug) {
-      carregarVendedor()
-    }
-  }, [vendedorSlug])
-
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout
-
-    if (pagamento?.id) {
-      intervalId = setInterval(verificarPagamento, 5000) // Verifica a cada 5 segundos
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId)
-    }
-  }, [pagamento?.id])
-
+  
   const verificarPagamento = async () => {
     if (!pagamento?.id) return
 
@@ -85,6 +68,25 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
       setStatus("Erro ao carregar informações do vendedor")
     }
   }
+
+  useEffect(() => {
+    if (vendedorSlug) {
+      carregarVendedor()
+    }
+  }, [vendedorSlug, , carregarVendedor])
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout
+
+    if (pagamento?.id) {
+      intervalId = setInterval(verificarPagamento, 5000) // Verifica a cada 5 segundos
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [pagamento?.id, verificarPagamento])
+
 
   const formatarTelefone = (valor: string) => {
     const numero = valor.replace(/\D/g, '')

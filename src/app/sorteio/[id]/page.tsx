@@ -23,13 +23,7 @@ export default function SorteioVisualizacaoPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
-  useEffect(() => {
-    if (params.id) {
-      carregarSorteio()
-      const interval = setInterval(carregarSorteio, 2000)
-      return () => clearInterval(interval)
-    }
-  }, [params.id])
+  
 
   const carregarSorteio = async () => {
     try {
@@ -50,6 +44,14 @@ export default function SorteioVisualizacaoPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (params.id) {
+      carregarSorteio()
+      const interval = setInterval(carregarSorteio, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [params.id, carregarSorteio])
 
   if (loading) {
     return (
