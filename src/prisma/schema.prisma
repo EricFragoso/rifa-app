@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env.DATABASE_URL
+}
+
+model Usuario {
+  id               String    @id @default(cuid())
+  nome             String
+  email            String    @unique
+  telefone         String
+  tipo             String // "ADMIN" | "VENDEDOR" | "COMPRADOR"
+  bilhetes         Bilhete[]
+  vendasRealizadas Bilhete[] @relation("Vendedor")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Bilhete {
+  id          String   @id @default(cuid())
+  numero      String   @unique
+  status      String // "DISPONIVEL" | "RESERVADO" | "PAGO"
+  valor       Float
+  comprador   Usuario? @relation(fields: [compradorId], references: [id])
+  compradorId String?
+  vendedor    Usuario? @relation("Vendedor", fields: [vendedorId], references: [id])
+  vendedorId  String?
+  sorteio     Sorteio? @relation(fields: [sorteioId], references: [id])
+  sorteioId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Sorteio {
+  id             String    @id @default(cuid())
+  data           DateTime
+  numeroSorteado String?
+  status         String // "AGENDADO" | "REALIZADO" | "CANCELADO"
+  bilhetes       Bilhete[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Pagamento {
+  id        String   @id @default(cuid())
+  valor     Float
+  status    String // "PENDENTE" | "PAGO" | "CANCELADO"
+  pixCode   String?  @db.Text
+  pixUrl    String?  @db.Text
+  bilheteId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

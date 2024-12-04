@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  //provider = "mysql"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Configuracao {
+  id    Int    @id @default(autoincrement())
+  chave String @unique
+  valor String @db.Text
+}
+
+model Usuario {
+  id                   Int                    @id @default(autoincrement())
+  nome                 String
+  email                String                 @unique
+  telefone             String
+  tipo                 String
+  slug                 String?                @unique
+  ativo                Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  bilhetes             Bilhete[]
+  vendasRealizadas     Bilhete[]              @relation("Vendedor")
+  configuracaoComissao ConfiguracaoComissao[]
+}
+
+model Bilhete {
+  id          Int      @id @default(autoincrement())
+  numero      String   @unique
+  status      String
+  valor       Float
+  compradorId Int?
+  comprador   Usuario? @relation(fields: [compradorId], references: [id])
+  vendedorId  Int?
+  vendedor    Usuario? @relation("Vendedor", fields: [vendedorId], references: [id])
+  sorteioId   Int?
+  sorteio     Sorteio? @relation(fields: [sorteioId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Sorteio {
+  id             Int       @id @default(autoincrement())
+  data           DateTime
+  numeroSorteado String?
+  status         String
+  bilhetes       Bilhete[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Pagamento {
+  id        Int      @id @default(autoincrement())
+  valor     Float
+  status    String
+  pixCode   String?  @db.Text
+  pixUrl    String?  @db.Text
+  bilheteId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ConfiguracaoComissao {
+  id         Int       @id @default(autoincrement())
+  percentual Float
+  vendedorId Int?
+  Usuario    Usuario?  @relation(fields: [vendedorId], references: [id])
+  dataInicio DateTime  @default(now())
+  dataFim    DateTime?
+  ativo      Boolean   @default(true)
+}
