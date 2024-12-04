@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Copy } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import Image from "next/image"
 
 interface ComprarFormProps {
@@ -19,10 +19,10 @@ interface Vendedor {
 }
 
 interface PagamentoResponse {
-  id: string
-  qrCode: string
-  qrCodeBase64: string
-  valor: number
+  init_point: string
+  preference_id: string
+  qr_code?: string
+  qr_code_base64?: string
 }
 
 export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
@@ -38,22 +38,11 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
   
   const valorBilhete = 10
 
-  
-  const verificarPagamento = async () => {
-    if (!pagamento?.id) return
-
-    try {
-      const res = await fetch(`/api/pagamentos?id=${pagamento.id}`)
-      const data = await res.json()
-
-      if (data.status === 'approved') {
-        setStatus("Pagamento confirmado! Seus bilhetes foram reservados.")
-        clearInterval()
-      }
-    } catch (error) {
-      console.error('Erro ao verificar pagamento:', error)
+  useEffect(() => {
+    if (vendedorSlug) {
+      carregarVendedor()
     }
-  }
+  }, [vendedorSlug])
 
   const carregarVendedor = async () => {
     try {
@@ -70,23 +59,32 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
   }
 
   useEffect(() => {
-    if (vendedorSlug) {
-      carregarVendedor()
-    }
-  }, [vendedorSlug, , carregarVendedor])
+    let intervalId: NodeJS.Timeout | null = null;
 
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout
+    if (pagamento?.preference_id) {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/pagamentos?id=${pagamento.preference_id}`)
+          const data = await res.json()
 
-    if (pagamento?.id) {
-      intervalId = setInterval(verificarPagamento, 5000) // Verifica a cada 5 segundos
+          if (data.status === 'approved') {
+            setStatus("Pagamento confirmado! Seus bilhetes foram reservados.")
+            if (intervalId) {
+              clearInterval(intervalId)
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao verificar pagamento:', error)
+        }
+      }, 5000)
     }
 
     return () => {
-      if (intervalId) clearInterval(intervalId)
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
     }
-  }, [pagamento?.id, verificarPagamento])
-
+  }, [pagamento?.preference_id])
 
   const formatarTelefone = (valor: string) => {
     const numero = valor.replace(/\D/g, '')
@@ -96,27 +94,11 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
       .slice(0, 15)
   }
 
-  const copiarQRCode = async () => {
-    if (pagamento?.qrCode) {
-      await navigator.clipboard.writeText(pagamento.qrCode)
-      setStatus("Código PIX copiado!")
-    }
-  }
-
   const handleComprar = async () => {
     try {
       setLoading(true)
       setStatus("Processando sua compra...")
 
-      console.log("Dados sendo enviados:", {
-        quantidade,
-        nome,
-        email,
-        telefone,
-        vendedorId: vendedor?.id
-      })
-
-      // Primeiro gerar os bilhetes
       const resBilhetes = await fetch('/api/bilhetes', {
         method: 'POST',
         headers: {
@@ -132,7 +114,6 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
       })
 
       const bilhetesData = await resBilhetes.json()
-      console.log("Resposta bilhetes:", bilhetesData)
 
       if (bilhetesData.error) {
         setStatus(`Erro: ${bilhetesData.error}`)
@@ -141,7 +122,6 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
 
       setBilhetes(bilhetesData.bilhetes.map((b: any) => b.numero))
 
-      // Gerar pagamento
       const resPagamento = await fetch('/api/pagamentos', {
         method: 'POST',
         headers: {
@@ -158,7 +138,6 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
       })
 
       const pagamentoData = await resPagamento.json()
-      console.log("Resposta pagamento:", pagamentoData)
 
       if (pagamentoData.error) {
         setStatus(`Erro: ${pagamentoData.error}`)
@@ -167,7 +146,7 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
         setStatus("QR Code gerado! Faça o pagamento para confirmar seus bilhetes.")
       }
     } catch (error) {
-      console.error('Erro detalhado:', error)
+      console.error('Erro completo:', error)
       setStatus("Erro ao processar sua compra. Tente novamente.")
     } finally {
       setLoading(false)
@@ -288,34 +267,26 @@ export default function ComprarForm({ vendedorSlug }: ComprarFormProps) {
 
               <div className="space-y-4 text-center">
                 <p className="font-medium">Escaneie o QR Code para pagar:</p>
-                <div className="flex justify-center">
-                  <Image
-                    src={`data:image/png;base64,${pagamento.qrCodeBase64}`}
-                    alt="QR Code PIX"
-                    width={200}
-                    height={200}
-                    className="border rounded-lg"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Ou copie o código PIX:</p>
-                  <div className="relative">
-                    <Input
-                      value={pagamento.qrCode}
-                      readOnly
-                      className="pr-10"
+                {pagamento.qr_code_base64 && (
+                  <div className="flex justify-center">
+                    <Image
+                      src={`data:image/png;base64,${pagamento.qr_code_base64}`}
+                      alt="QR Code PIX"
+                      width={200}
+                      height={200}
+                      className="border rounded-lg"
                     />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="absolute right-0 top-0"
-                      onClick={copiarQRCode}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
                   </div>
-                </div>
+                )}
+                
+                {pagamento.qr_code && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Ou copie o código PIX:</p>
+                    <div className="p-2 bg-slate-50 rounded border break-all">
+                      <code className="text-sm">{pagamento.qr_code}</code>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
