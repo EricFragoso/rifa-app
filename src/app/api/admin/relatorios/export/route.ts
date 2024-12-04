@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const status = searchParams.get('status')
     
     // Buscar dados usando a mesma lógica da rota anterior
-    let dados = []
+    let dados: any[] = []
 
     switch (tipoRelatorio) {
       case 'vendas':

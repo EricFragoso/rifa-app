@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const dataFim = new Date(searchParams.get('dataFim') || '')
     const status = searchParams.get('status')
     
-    let dados = []
+    let dados: any[] = []
 
     switch (tipoRelatorio) {
       case 'vendas':
