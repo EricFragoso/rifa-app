@@ -1,56 +1,99 @@
-import { MercadoPagoConfig, Payment } from 'mercadopago';
+import mercadopago from 'mercadopago'
 
-const client = new MercadoPagoConfig({ 
-  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN! 
-});
+// Configurar o SDK com o token de acesso
+mercadopago.configure({
+  access_token: process.env.MERCADOPAGO_ACCESS_TOKEN!
+})
 
-interface PaymentData {
-  valor: number;
-  referencia: string;
-  comprador: {
-    nome: string;
-    email: string;
-  };
-  descricao: string;
+interface PaymentPreference {
+  id: string;
+  qrCode: string;
+  qrCodeBase64?: string;
+  init_point: string;
 }
 
-export async function criarPagamentoPix({ valor, referencia, comprador, descricao }: PaymentData) {
-  try {
-    const payment = await new Payment(client).create({
-      body: {
-        transaction_amount: valor,
-        description: descricao,
-        payment_method_id: "pix",
-        payer: {
-          email: comprador.email,
-          first_name: comprador.nome.split(' ')[0],
-          last_name: comprador.nome.split(' ').slice(1).join(' ') || comprador.nome
-        },
-        external_reference: referencia
-      }
-    });
+interface PaymentItem {
+  id: string;
+  title: string;
+  quantity: number;
+  unit_price: number;
+}
 
-    if (!payment.point_of_interaction?.transaction_data?.qr_code) {
-      throw new Error('QR Code não gerado');
+interface PaymentPayer {
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+interface PaymentPreferenceRequest {
+  items: PaymentItem[];
+  payer: PaymentPayer;
+  external_reference: string;
+}
+
+export async function createPaymentPreference(data: PaymentPreferenceRequest): Promise<PaymentPreference> {
+  try {
+    const preference = await mercadopago.preferences.create({
+      items: data.items,
+      payer: {
+        ...data.payer
+      },
+      payment_methods: {
+        default_payment_method_id: "pix",
+        excluded_payment_methods: [],
+        excluded_payment_types: ["credit_card", "debit_card", "ticket"]
+      },
+      external_reference: data.external_reference,
+      notification_url: `${process.env.NEXT_PUBLIC_BASE_URL}/api/webhook/mercadopago`,
+      auto_return: "approved",
+      expires: true,
+      expiration_date_to: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutos
+    })
+
+    // Extrair dados do PIX da resposta
+    const pixData = preference.body.point_of_interaction?.transaction_data
+
+    if (!pixData) {
+      throw new Error('Dados do PIX não encontrados')
     }
 
     return {
-      id: payment.id,
-      qrCode: payment.point_of_interaction.transaction_data.qr_code,
-      qrCodeBase64: payment.point_of_interaction.transaction_data.qr_code_base64
-    };
+      id: preference.body.id,
+      qrCode: pixData.qr_code,
+      qrCodeBase64: pixData.qr_code_base64,
+      init_point: preference.body.init_point
+    }
   } catch (error) {
-    console.error('Erro ao criar pagamento:', error);
-    throw new Error('Erro ao gerar pagamento PIX');
+    console.error('Erro ao criar preferência de pagamento:', error)
+    throw new Error('Erro ao gerar pagamento PIX')
   }
 }
 
-export async function verificarStatusPagamento(pagamentoId: string) {
+export async function getPaymentStatus(paymentId: string) {
   try {
-    const payment = await new Payment(client).get({ id: pagamentoId });
-    return payment.status;
+    const payment = await mercadopago.payment.get(paymentId)
+    return payment.body.status
   } catch (error) {
-    console.error('Erro ao verificar pagamento:', error);
-    throw new Error('Erro ao verificar status do pagamento');
+    console.error('Erro ao verificar pagamento:', error)
+    throw new Error('Erro ao verificar status do pagamento')
+  }
+}
+
+export async function createPayment(paymentData: {
+  transaction_amount: number;
+  description: string;
+  payment_method_id: string;
+  payer: {
+    email: string;
+    first_name: string;
+    last_name: string;
+  }
+}) {
+  try {
+    const payment = await mercadopago.payment.create(paymentData)
+    return payment
+  } catch (error) {
+    console.error('Erro ao criar pagamento:', error)
+    throw new Error('Erro ao criar pagamento')
   }
 }

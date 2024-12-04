@@ -1,28 +1,36 @@
 import { prisma } from '@/lib/prisma'
-import { verificarStatusPagamento } from '@/lib/mercadopago'
+import { getPaymentStatus } from '@/lib/mercadopago'
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
   try {
-    const { action, data } = await req.json()
+    const { searchParams } = new URL(req.url)
+    const type = searchParams.get('type')
+    const id = searchParams.get('data.id')
 
-    // Apenas processar notificações de pagamento
-    if (action !== 'payment.updated' && action !== 'payment.created') {
-      return NextResponse.json({ message: 'Evento ignorado' })
+    // Processar apenas notificações de pagamento
+    if (type !== 'payment') {
+      return NextResponse.json({ success: true })
     }
 
-    const status = await verificarStatusPagamento(data.id)
+    if (!id) {
+      return NextResponse.json({ error: 'ID não fornecido' }, { status: 400 })
+    }
 
+    // Verificar status do pagamento
+    const status = await getPaymentStatus(id)
+
+    // Encontrar pagamento no banco de dados
     const pagamento = await prisma.pagamento.findFirst({
-      where: { pixCode: data.id.toString() }
+      where: { pixCode: id.toString() }
     })
 
     if (!pagamento) {
       return NextResponse.json({ error: 'Pagamento não encontrado' }, { status: 404 })
     }
 
-    // Atualizar status baseado na resposta do Mercado Pago
-    if (status === 'approved' && pagamento.status !== 'PAGO') {
+    // Atualizar status do pagamento e bilhetes
+    if (status === 'approved') {
       await prisma.$transaction([
         prisma.pagamento.update({
           where: { id: pagamento.id },
@@ -33,7 +41,7 @@ export async function POST(req: Request) {
           data: { status: 'PAGO' }
         })
       ])
-    } else if (['cancelled', 'refunded'].includes(status)) {
+    } else if (['cancelled', 'refunded', 'charged_back'].includes(status)) {
       await prisma.$transaction([
         prisma.pagamento.update({
           where: { id: pagamento.id },

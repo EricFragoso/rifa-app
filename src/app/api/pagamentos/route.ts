@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
-import { criarPagamentoPix, verificarStatusPagamento } from '@/lib/mercadopago'
+import { createPaymentPreference } from '@/lib/mercadopago'
 
 export async function POST(req: Request) {
   try {
@@ -20,18 +20,26 @@ export async function POST(req: Request) {
     }
 
     const valorTotal = bilhetes.reduce((acc, bilhete) => acc + bilhete.valor, 0)
-    const referencia = `RIFA-${Date.now()}`
+    const referenceId = `RIFA-${Date.now()}`
 
-    // Criar pagamento no Mercado Pago
-    const pagamentoPix = await criarPagamentoPix({
-      valor: valorTotal,
-      referencia,
-      comprador: {
-        nome: comprador.nome,
-        email: comprador.email
+    const pagamentoPix = await createPaymentPreference({
+      items: [{
+        id: referenceId,
+        title: `${bilhetes.length} bilhete(s) de rifa`,
+        quantity: 1,
+        unit_price: valorTotal
+      }],
+      payer: {
+        email: comprador.email,
+        first_name: comprador.nome.split(' ')[0],
+        last_name: comprador.nome.split(' ').slice(1).join(' ') || comprador.nome
       },
-      descricao: `${bilhetes.length} bilhete(s) - Rifa Online`
+      external_reference: referenceId
     })
+
+    if (!pagamentoPix || !pagamentoPix.id || !pagamentoPix.qrCode) {
+      throw new Error('Erro ao gerar pagamento PIX')
+    }
 
     // Registrar pagamento no banco
     const pagamento = await prisma.pagamento.create({
@@ -45,9 +53,10 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({
-      id: pagamentoPix.id,
-      qrCode: pagamentoPix.qrCode,
-      qrCodeBase64: pagamentoPix.qrCodeBase64
+      payment_id: pagamentoPix.id,
+      init_point: pagamentoPix.qrCode,
+      qr_code: pagamentoPix.qrCode,
+      qr_code_base64: pagamentoPix.qrCodeBase64
     })
 
   } catch (error) {
@@ -61,36 +70,25 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const id = searchParams.get('id')
+    const paymentId = searchParams.get('payment_id')
 
-    if (!id) {
+    if (!paymentId) {
       return NextResponse.json({
         error: 'ID do pagamento é obrigatório'
       }, { status: 400 })
     }
 
-    const status = await verificarStatusPagamento(id)
-    
-    if (status === 'approved') {
-      const pagamento = await prisma.pagamento.findFirst({
-        where: { pixCode: id }
-      })
+    const pagamento = await prisma.pagamento.findFirst({
+      where: { pixCode: paymentId }
+    })
 
-      if (pagamento) {
-        await prisma.$transaction([
-          prisma.pagamento.update({
-            where: { id: pagamento.id },
-            data: { status: 'PAGO' }
-          }),
-          prisma.bilhete.update({
-            where: { id: pagamento.bilheteId },
-            data: { status: 'PAGO' }
-          })
-        ])
-      }
+    if (!pagamento) {
+      return NextResponse.json({
+        error: 'Pagamento não encontrado'
+      }, { status: 404 })
     }
 
-    return NextResponse.json({ status })
+    return NextResponse.json({ status: pagamento.status })
   } catch (error) {
     console.error('Erro ao verificar pagamento:', error)
     return NextResponse.json({
