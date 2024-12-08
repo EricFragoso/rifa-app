@@ -4,95 +4,65 @@ import { createPaymentPreference } from '@/lib/mercadopago'
 
 export async function POST(req: Request) {
   try {
-    const { bilheteIds, comprador } = await req.json()
+    const body = await req.json()
+    const { rifaId, numeroEscolhido, userId } = body
 
-    const bilhetes = await prisma.bilhete.findMany({
+    // Verificar se o número já foi escolhido
+    const numeroExistente = await prisma.numero.findFirst({
       where: {
-        id: { in: bilheteIds },
-        status: 'RESERVADO'
-      }
-    })
-
-    if (bilhetes.length === 0) {
-      return NextResponse.json({
-        error: 'Bilhetes não encontrados ou não disponíveis'
-      }, { status: 400 })
-    }
-
-    const valorTotal = bilhetes.reduce((acc, bilhete) => acc + bilhete.valor, 0)
-    const referenceId = `RIFA-${Date.now()}`
-
-    const pagamentoPix = await createPaymentPreference({
-      items: [{
-        id: referenceId,
-        title: `${bilhetes.length} bilhete(s) de rifa`,
-        quantity: 1,
-        unit_price: valorTotal
-      }],
-      payer: {
-        email: comprador.email,
-        first_name: comprador.nome.split(' ')[0],
-        last_name: comprador.nome.split(' ').slice(1).join(' ') || comprador.nome
+        rifaId,
+        numero: numeroEscolhido,
       },
-      external_reference: referenceId
     })
 
-    if (!pagamentoPix || !pagamentoPix.id || !pagamentoPix.qrCode) {
-      throw new Error('Erro ao gerar pagamento PIX')
+    if (numeroExistente) {
+      return NextResponse.json({ error: 'Número já escolhido' }, { status: 400 })
     }
 
-    // Registrar pagamento no banco
-    const pagamento = await prisma.pagamento.create({
+    // Buscar informações da rifa
+    const rifa = await prisma.rifa.findUnique({
+      where: { id: rifaId },
+    })
+
+    if (!rifa) {
+      return NextResponse.json({ error: 'Rifa não encontrada' }, { status: 404 })
+    }
+
+    // Criar preferência de pagamento no MercadoPago
+    const preference = await createPaymentPreference({
+      items: [
+        {
+          title: `Número ${numeroEscolhido} da Rifa ${rifa.titulo}`,
+          unit_price: rifa.valorNumero,
+          quantity: 1,
+        },
+      ],
+      back_urls: {
+        success: `${process.env.NEXT_PUBLIC_URL}/success`,
+        failure: `${process.env.NEXT_PUBLIC_URL}/failure`,
+        pending: `${process.env.NEXT_PUBLIC_URL}/pending`,
+      },
+      auto_return: "approved",
+    })
+
+    // Criar o número na base de dados
+    const novoNumero = await prisma.numero.create({
       data: {
-        valor: valorTotal,
-        status: 'PENDENTE',
-        pixCode: pagamentoPix.id.toString(),
-        pixUrl: pagamentoPix.qrCode,
-        bilheteId: bilhetes[0].id
-      }
+        numero: numeroEscolhido,
+        rifaId,
+        userId,
+        status: 'RESERVADO',
+        preferenciaId: preference.id,
+      },
     })
 
-    return NextResponse.json({
-      payment_id: pagamentoPix.id,
-      init_point: pagamentoPix.qrCode,
-      qr_code: pagamentoPix.qrCode,
-      qr_code_base64: pagamentoPix.qrCodeBase64
+    return NextResponse.json({ 
+      numero: novoNumero, 
+      preferenciaId: preference.id,
+      initPoint: preference.init_point 
     })
-
   } catch (error) {
-    console.error('Erro ao processar pagamento:', error)
-    return NextResponse.json({
-      error: 'Erro ao processar pagamento'
-    }, { status: 500 })
-  }
-}
-
-export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const paymentId = searchParams.get('payment_id')
-
-    if (!paymentId) {
-      return NextResponse.json({
-        error: 'ID do pagamento é obrigatório'
-      }, { status: 400 })
-    }
-
-    const pagamento = await prisma.pagamento.findFirst({
-      where: { pixCode: paymentId }
-    })
-
-    if (!pagamento) {
-      return NextResponse.json({
-        error: 'Pagamento não encontrado'
-      }, { status: 404 })
-    }
-
-    return NextResponse.json({ status: pagamento.status })
-  } catch (error) {
-    console.error('Erro ao verificar pagamento:', error)
-    return NextResponse.json({
-      error: 'Erro ao verificar pagamento'
-    }, { status: 500 })
+    console.error(error)
+    return NextResponse.json({ error: 'Erro ao processar pagamento' }, { status: 500 })
   }
 }
