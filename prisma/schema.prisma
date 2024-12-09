@@ -3,9 +3,34 @@ generator client {
 }
 
 datasource db {
-  //provider = "mysql"
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum UsuarioTipo {
+  ADMIN
+  VENDEDOR
+  CLIENTE
+}
+
+enum BilheteStatus {
+  DISPONIVEL
+  RESERVADO
+  PAGO
+  CANCELADO
+}
+
+enum SorteioStatus {
+  ABERTO
+  FECHADO
+  REALIZADO
+  CANCELADO
+}
+
+enum PagamentoStatus {
+  PENDENTE
+  PAGO
+  CANCELADO
 }
 
 model Configuracao {
@@ -19,7 +44,7 @@ model Usuario {
   nome                 String
   email                String                 @unique
   telefone             String
-  tipo                 String
+  tipo                 UsuarioTipo
   slug                 String?                @unique
   ativo                Boolean                @default(true)
   createdAt            DateTime               @default(now())
@@ -30,39 +55,39 @@ model Usuario {
 }
 
 model Bilhete {
-  id          Int      @id @default(autoincrement())
-  numero      String   @unique
-  status      String
+  id          Int           @id @default(autoincrement())
+  numero      String        @unique
+  status      BilheteStatus
   valor       Float
   compradorId Int?
-  comprador   Usuario? @relation(fields: [compradorId], references: [id])
+  comprador   Usuario?      @relation(fields: [compradorId], references: [id])
   vendedorId  Int?
-  vendedor    Usuario? @relation("Vendedor", fields: [vendedorId], references: [id])
+  vendedor    Usuario?      @relation("Vendedor", fields: [vendedorId], references: [id])
   sorteioId   Int?
-  sorteio     Sorteio? @relation(fields: [sorteioId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  sorteio     Sorteio?      @relation(fields: [sorteioId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }
 
 model Sorteio {
-  id             Int       @id @default(autoincrement())
+  id             Int           @id @default(autoincrement())
   data           DateTime
   numeroSorteado String?
-  status         String
+  status         SorteioStatus
   bilhetes       Bilhete[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 model Pagamento {
-  id        Int      @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   valor     Float
-  status    String
-  pixCode   String?  @db.Text
-  pixUrl    String?  @db.Text
+  status    PagamentoStatus
+  pixCode   String?         @db.Text
+  pixUrl    String?         @db.Text
   bilheteId Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 }
 
 model ConfiguracaoComissao {

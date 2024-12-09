@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getPaymentStatus } from '@/lib/mercadopago'
 import { NextResponse } from 'next/server'
+import { PagamentoStatus, BilheteStatus } from '@prisma/client'
 
 export async function POST(req: Request) {
   try {
@@ -20,6 +21,11 @@ export async function POST(req: Request) {
     // Verificar status do pagamento
     const status = await getPaymentStatus(id)
 
+    // Se o status não foi encontrado, retornar erro
+    if (!status) {
+      return NextResponse.json({ error: 'Status não encontrado' }, { status: 404 })
+    }
+
     // Encontrar pagamento no banco de dados
     const pagamento = await prisma.pagamento.findFirst({
       where: { pixCode: id.toString() }
@@ -34,14 +40,14 @@ export async function POST(req: Request) {
       await prisma.$transaction([
         prisma.pagamento.update({
           where: { id: pagamento.id },
-          data: { status: 'PAGO' }
+          data: { status: 'PAGO' as PagamentoStatus }
         }),
         prisma.bilhete.update({
           where: { id: pagamento.bilheteId },
-          data: { status: 'PAGO' }
+          data: { status: 'PAGO' as BilheteStatus }
         })
       ])
-    } else if (['cancelled', 'refunded', 'charged_back'].includes(status)) {
+    } else if (['cancelled', 'refunded', 'charged_back'].includes(status as string)) {
       await prisma.$transaction([
         prisma.pagamento.update({
           where: { id: pagamento.id },

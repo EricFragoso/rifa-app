@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
+import { BilheteStatus, UsuarioTipo } from '@prisma/client'
 
 export async function GET(request: Request) {
   try {
@@ -7,7 +8,7 @@ export async function GET(request: Request) {
     const tipoRelatorio = searchParams.get('tipoRelatorio')
     const dataInicio = new Date(searchParams.get('dataInicio') || '')
     const dataFim = new Date(searchParams.get('dataFim') || '')
-    const status = searchParams.get('status')
+    const status = searchParams.get('status') as BilheteStatus | null
     
     let dados: any[] = []
 
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
               gte: dataInicio,
               lte: dataFim
             },
-            ...(status && { status })
+            ...(status && { status: status as BilheteStatus })
           },
           include: {
             comprador: {
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
       case 'comissoes':
         const vendedores = await prisma.usuario.findMany({
           where: {
-            tipo: 'VENDEDOR',
+            tipo: UsuarioTipo.VENDEDOR,
             ativo: true
           },
           include: {
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
                   gte: dataInicio,
                   lte: dataFim
                 },
-                status: 'PAGO'
+                status: BilheteStatus.PAGO
               }
             },
             configuracaoComissao: {
@@ -99,7 +100,7 @@ export async function GET(request: Request) {
       case 'vendedores':
         dados = await prisma.usuario.findMany({
           where: {
-            tipo: 'VENDEDOR',
+            tipo: UsuarioTipo.VENDEDOR,
             ativo: true
           },
           include: {
@@ -127,7 +128,7 @@ export async function GET(request: Request) {
               gte: dataInicio,
               lte: dataFim
             },
-            ...(status && { status })
+            ...(status && { status: status as BilheteStatus })
           },
           orderBy: {
             numero: 'asc'
