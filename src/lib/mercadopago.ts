@@ -1,8 +1,9 @@
-import { MercadoPagoConfig, Payment, Preference } from 'mercadopago';
+import mercadopago from 'mercadopago'
 
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN!
-});
+// Configurar o SDK com o token de acesso
+mercadopago.configure({
+  access_token: process.env.MERCADOPAGO_ACCESS_TOKEN!
+})
 
 interface PaymentPreference {
   id: string;
@@ -32,8 +33,7 @@ interface PaymentPreferenceRequest {
 
 export async function createPaymentPreference(data: PaymentPreferenceRequest): Promise<PaymentPreference> {
   try {
-    const preference = new Preference(client);
-    const result = await preference.create({
+    const preference = await mercadopago.preferences.create({
       items: data.items,
       payer: {
         ...data.payer
@@ -48,35 +48,34 @@ export async function createPaymentPreference(data: PaymentPreferenceRequest): P
       auto_return: "approved",
       expires: true,
       expiration_date_to: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutos
-    });
+    })
 
     // Extrair dados do PIX da resposta
-    const pixData = result.point_of_interaction?.transaction_data;
+    const pixData = preference.body.point_of_interaction?.transaction_data
 
     if (!pixData) {
-      throw new Error('Dados do PIX não encontrados');
+      throw new Error('Dados do PIX não encontrados')
     }
 
     return {
-      id: result.id,
+      id: preference.body.id,
       qrCode: pixData.qr_code,
       qrCodeBase64: pixData.qr_code_base64,
-      init_point: result.init_point
-    };
+      init_point: preference.body.init_point
+    }
   } catch (error) {
-    console.error('Erro ao criar preferência de pagamento:', error);
-    throw new Error('Erro ao gerar pagamento PIX');
+    console.error('Erro ao criar preferência de pagamento:', error)
+    throw new Error('Erro ao gerar pagamento PIX')
   }
 }
 
 export async function getPaymentStatus(paymentId: string) {
   try {
-    const payment = new Payment(client);
-    const result = await payment.get({ id: paymentId });
-    return result.status;
+    const payment = await mercadopago.payment.get(paymentId)
+    return payment.body.status
   } catch (error) {
-    console.error('Erro ao verificar pagamento:', error);
-    throw new Error('Erro ao verificar status do pagamento');
+    console.error('Erro ao verificar pagamento:', error)
+    throw new Error('Erro ao verificar status do pagamento')
   }
 }
 
@@ -91,11 +90,10 @@ export async function createPayment(paymentData: {
   }
 }) {
   try {
-    const payment = new Payment(client);
-    const result = await payment.create(paymentData);
-    return result;
+    const payment = await mercadopago.payment.create(paymentData)
+    return payment
   } catch (error) {
-    console.error('Erro ao criar pagamento:', error);
-    throw new Error('Erro ao criar pagamento');
+    console.error('Erro ao criar pagamento:', error)
+    throw new Error('Erro ao criar pagamento')
   }
 }
